@@ -52,10 +52,11 @@ Open http://localhost:3000.
 
 ## Deploy online (Render, free plan)
 
-1. Sign in at https://render.com with GitHub.
-2. **New → Blueprint**, pick this repository. Render reads `render.yaml`.
-3. Enter the four required settings when asked, then deploy.
-4. Open the `https://…onrender.com` address Render gives you.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/asha-kendra/sms-bulk-sender)
+
+1. Click the button above (or in Render: **New → Blueprint** and pick this repository). Sign in with GitHub and allow Render to access this repository if asked. Render reads `render.yaml`.
+2. Enter the four required settings when asked, then click **Apply** / **Deploy**.
+3. When the deploy shows **Live**, open the `https://…onrender.com` address Render gives you.
 
 Free Render services go to sleep when unused, so the first page load after a while can take up to a minute.
 
