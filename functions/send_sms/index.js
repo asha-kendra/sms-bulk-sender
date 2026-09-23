@@ -1,4 +1,9 @@
+const crypto = require('crypto');
 const express = require('express');
+
+// Max contacts accepted in one /bulk request, and how many Vumber calls run at once.
+const MAX_CONTACTS = parseInt(process.env.SMS_MAX_CONTACTS, 10) || 500;
+const CONCURRENCY = parseInt(process.env.SMS_CONCURRENCY, 10) || 5;
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -7,13 +12,31 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
 	if (req.method === 'OPTIONS') {
 		res.status(200).end();
 		return;
 	}
 	next();
 });
+
+// Rejects requests whose X-API-Key header doesn't match SMS_API_KEY. Fails closed if
+// SMS_API_KEY isn't configured, so a missing env var never leaves /bulk open.
+function requireApiKey(req, res, next) {
+	const expected = process.env.SMS_API_KEY;
+	if (!expected) {
+		res.status(500).send({ success: false, error: 'SMS_API_KEY is not configured on the server' });
+		return;
+	}
+	const given = req.get('X-API-Key') || '';
+	const a = crypto.createHash('sha256').update(given).digest();
+	const b = crypto.createHash('sha256').update(expected).digest();
+	if (!crypto.timingSafeEqual(a, b)) {
+		res.status(401).send({ success: false, error: 'Invalid or missing API key' });
+		return;
+	}
+	next();
+}
 
 function applyMergeFields(template, contact) {
 	// Handles {field_name} or {field_name|fallback text} merge-tag syntax.
@@ -38,8 +61,10 @@ async function sendVumberSms(publicNumber, customerPhoneNumber, content) {
 		},
 		body: JSON.stringify({ publicNumber, customerPhoneNumber, content })
 	});
-	const data = await resp.json();
-	if (!resp.ok) throw new Error(JSON.stringify(data));
+	const text = await resp.text();
+	let data;
+	try { data = JSON.parse(text); } catch { data = { raw: text }; }
+	if (!resp.ok) throw new Error(`Vumber ${resp.status}: ${JSON.stringify(data)}`);
 	return data;
 }
 
@@ -51,11 +76,41 @@ function findPhone(contact) {
 	return key ? String(contact[key]).trim() : null;
 }
 
+// Strips spaces, dashes, dots and brackets; keeps a leading +. Returns null unless the
+// result is 7-15 digits (E.164 length). No country code is added.
+function normalizePhone(raw) {
+	const trimmed = String(raw).trim();
+	const plus = trimmed.startsWith('+') ? '+' : '';
+	const digits = trimmed.replace(/[\s\-().]/g, '').replace(/^\+/, '');
+	if (!/^\d{7,15}$/.test(digits)) return null;
+	return plus + digits;
+}
+
+// Runs worker(item) over items with at most `limit` in flight, preserving order.
+async function mapWithConcurrency(items, limit, worker) {
+	const results = new Array(items.length);
+	let next = 0;
+	async function run() {
+		while (next < items.length) {
+			const i = next++;
+			results[i] = await worker(items[i]);
+		}
+	}
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+	return results;
+}
+
 async function sendBatch(contacts, messageTemplate) {
-	const results = [];
-	const sendPromises = contacts.map(async (contact) => {
-		const phone = findPhone(contact);
-		if (!phone) return { phone: null, skipped: true, reason: 'no phone/mobile field found' };
+	const seen = new Set();
+
+	return mapWithConcurrency(contacts, CONCURRENCY, async (contact) => {
+		const rawPhone = findPhone(contact);
+		if (!rawPhone) return { phone: null, skipped: true, reason: 'no phone/mobile field found' };
+
+		const phone = normalizePhone(rawPhone);
+		if (!phone) return { phone: rawPhone, skipped: true, reason: 'invalid phone number' };
+		if (seen.has(phone)) return { phone, skipped: true, reason: 'duplicate phone number' };
+		seen.add(phone);
 
 		const content = applyMergeFields(messageTemplate, contact);
 		const sentAt = new Date().toISOString();
@@ -70,10 +125,6 @@ async function sendBatch(contacts, messageTemplate) {
 			return { phone, message: content, sentAt, success: false, error: e.message };
 		}
 	});
-
-	const settled = await Promise.all(sendPromises);
-	for (const r of settled) results.push(r);
-	return results;
 }
 
 async function handleBulkRequest(req, res) {
@@ -82,6 +133,10 @@ async function handleBulkRequest(req, res) {
 
 		if (!Array.isArray(contacts) || contacts.length === 0) {
 			res.status(400).send({ success: false, error: 'contacts array is required and must not be empty' });
+			return;
+		}
+		if (contacts.length > MAX_CONTACTS) {
+			res.status(400).send({ success: false, error: `Too many contacts (${contacts.length}); the limit per send is ${MAX_CONTACTS}` });
 			return;
 		}
 		if (!message || typeof message !== 'string') {
@@ -101,7 +156,7 @@ async function handleBulkRequest(req, res) {
 	}
 }
 
-app.post('/bulk', handleBulkRequest);
+app.post('/bulk', requireApiKey, handleBulkRequest);
 app.options('/bulk', (req, res) => res.status(200).end());
 
 module.exports = app;

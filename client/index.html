@@ -190,6 +190,9 @@
 		<label for="apiUrl">Catalyst function URL (the /bulk route)</label>
 		<input type="url" id="apiUrl" value="https://smscampaign-939734750.development.catalystserverless.com/server/sms_campaign/bulk">
 		<p class="hint">Points at your deployed Catalyst function. Change it if you redeploy under a different URL.</p>
+		<label for="apiKey" style="margin-top:12px;">API key</label>
+		<input type="password" id="apiKey" autocomplete="off" placeholder="Value of SMS_API_KEY on the function">
+		<p class="hint">Sent as the <code>X-API-Key</code> header. Remembered in this browser only.</p>
 	</section>
 
 	<section>
@@ -239,6 +242,12 @@ const summaryPills = document.getElementById('summaryPills');
 const resultsTable = document.getElementById('resultsTable');
 const messageInput = document.getElementById('messageInput');
 const apiUrlInput = document.getElementById('apiUrl');
+const apiKeyInput = document.getElementById('apiKey');
+
+try { apiKeyInput.value = localStorage.getItem('smsApiKey') || ''; } catch (e) {}
+apiKeyInput.addEventListener('change', () => {
+	try { localStorage.setItem('smsApiKey', apiKeyInput.value.trim()); } catch (e) {}
+});
 
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
@@ -305,9 +314,12 @@ function renderPreview(rows, headers) {
 }
 
 function escapeHtml(str) {
-	const div = document.createElement('div');
-	div.textContent = str;
-	return div.innerHTML;
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 }
 
 function showError(msg) {
@@ -319,9 +331,11 @@ sendBtn.addEventListener('click', async () => {
 	errorBox.classList.remove('show');
 	const message = messageInput.value.trim();
 	const apiUrl = apiUrlInput.value.trim();
+	const apiKey = apiKeyInput.value.trim();
 
 	if (!message) { showError('Write a message first.'); return; }
 	if (!apiUrl) { showError('Set the backend endpoint URL first.'); return; }
+	if (!apiKey) { showError('Enter the API key first.'); return; }
 	if (!parsedContacts.length) { showError('Upload a contact list first.'); return; }
 
 	sendBtn.disabled = true;
@@ -331,10 +345,10 @@ sendBtn.addEventListener('click', async () => {
 	try {
 		const resp = await fetch(apiUrl, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
 			body: JSON.stringify({ contacts: parsedContacts, message })
 		});
-		const data = await resp.json();
+		const data = await resp.json().catch(() => ({}));
 
 		if (!resp.ok || data.success === false) {
 			showError(data.error || `Request failed (${resp.status})`);
