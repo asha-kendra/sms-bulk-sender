@@ -103,8 +103,10 @@ async function sendBatch(contacts, messageTemplate) {
 
 		const phone = normalizePhone(rawPhone);
 		if (!phone) return { phone: rawPhone, skipped: true, reason: 'invalid phone number' };
-		if (seen.has(phone)) return { phone, skipped: true, reason: 'duplicate phone number' };
-		seen.add(phone);
+		// Compare digits only, so +447700900001 and 447700900001 count as the same number.
+		const dedupeKey = phone.replace(/^\+/, '');
+		if (seen.has(dedupeKey)) return { phone, skipped: true, reason: 'duplicate phone number' };
+		seen.add(dedupeKey);
 
 		const content = applyMergeFields(messageTemplate, contact);
 		const sentAt = new Date().toISOString();

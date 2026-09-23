@@ -272,7 +272,8 @@ function handleFile(file) {
 	reader.onload = (e) => {
 		try {
 			const data = new Uint8Array(e.target.result);
-			const workbook = XLSX.read(data, { type: 'array' });
+			// raw: keep CSV cells as typed text, so a leading + or 0 on phone numbers survives.
+			const workbook = XLSX.read(data, { type: 'array', raw: true });
 			const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
 			const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
