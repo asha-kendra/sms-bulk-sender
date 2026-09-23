@@ -244,6 +244,12 @@ const messageInput = document.getElementById('messageInput');
 const apiUrlInput = document.getElementById('apiUrl');
 const apiKeyInput = document.getElementById('apiKey');
 
+// When the page is served by the Catalyst function itself (/server/<function>/),
+// post to that same function's /bulk route.
+if (location.protocol.startsWith('http') && location.pathname.startsWith('/server/')) {
+	apiUrlInput.value = location.origin + location.pathname.replace(/\/(index\.html)?$/, '') + '/bulk';
+}
+
 try { apiKeyInput.value = localStorage.getItem('smsApiKey') || ''; } catch (e) {}
 apiKeyInput.addEventListener('change', () => {
 	try { localStorage.setItem('smsApiKey', apiKeyInput.value.trim()); } catch (e) {}

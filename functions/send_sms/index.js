@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 
 // Max contacts accepted in one /bulk request, and how many Vumber calls run at once.
@@ -156,6 +158,17 @@ async function handleBulkRequest(req, res) {
 		res.status(500).send({ success: false, error: err.message });
 	}
 }
+
+// Serves the upload page from the function itself, so the page and /bulk share one
+// origin (no CORS, no separate web hosting). index.html is copied in by bundle.sh.
+const pagePath = path.join(__dirname, 'index.html');
+app.get(['/', '/index.html'], (req, res) => {
+	if (!fs.existsSync(pagePath)) {
+		res.status(404).send('index.html is not bundled with this function; build the zip with bundle.sh');
+		return;
+	}
+	res.sendFile(pagePath);
+});
 
 app.post('/bulk', requireApiKey, handleBulkRequest);
 app.options('/bulk', (req, res) => res.status(200).end());

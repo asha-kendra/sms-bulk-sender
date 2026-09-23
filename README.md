@@ -58,9 +58,21 @@ This is a standard Catalyst function export (`catalyst-config.json` names it `se
 catalyst deploy --only functions/send_sms
 ```
 
-### Hosting the page on Catalyst
+### Opening the page (served by the function)
 
-Opening `index.html` straight from disk (`file://`) makes the browser send an origin Catalyst won't accept, so sends fail with "Failed to fetch". Host it in the same Catalyst project instead: zip `client/index.html` and `client/client-package.json` (both at the zip root) and upload the zip under Web Client Hosting, or run `catalyst deploy --only client` from a linked project. The page is then served from the project's own domain, so no CORS setup is needed.
+The function also serves the upload page at its root, so no separate web hosting is needed (Catalyst's free trial doesn't include Web Client Hosting):
+
+```
+https://<project-domain>/server/<function-route>/
+```
+
+e.g. `https://smscampaign-939734750.development.catalystserverless.com/server/sms_campaign/`. Served that way, the page fills in its own `/bulk` URL, and the page and API share one origin, so there is no CORS to configure. Opening `index.html` straight from disk (`file://`) is what causes "Failed to fetch" against Catalyst.
+
+To build the zip to upload as the function's code (it bundles a copy of `client/index.html`):
+
+```bash
+./bundle.sh        # writes send_sms.zip
+```
 
 Then point `client/index.html`'s "Catalyst function URL" field at the deployed `/bulk` route for that function (an API Gateway route pointing at it — the original page shipped with `.../server/sms_campaign/bulk`, which may be a differently-named gateway route mapped to this same function).
 
