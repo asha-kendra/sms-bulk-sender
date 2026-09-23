@@ -20,15 +20,16 @@ app.use((req, res, next) => {
 	next();
 });
 
-// Rejects requests whose X-API-Key header doesn't match SMS_API_KEY. Fails closed if
-// SMS_API_KEY isn't configured, so a missing env var never leaves /bulk open.
+// Rejects requests whose key doesn't match SMS_API_KEY. The key is read from the JSON
+// body's apiKey (what the upload page sends, so no extra CORS header is needed) or an
+// X-API-Key header. Fails closed if SMS_API_KEY isn't configured.
 function requireApiKey(req, res, next) {
 	const expected = process.env.SMS_API_KEY;
 	if (!expected) {
 		res.status(500).send({ success: false, error: 'SMS_API_KEY is not configured on the server' });
 		return;
 	}
-	const given = req.get('X-API-Key') || '';
+	const given = String((req.body && req.body.apiKey) || req.get('X-API-Key') || '');
 	const a = crypto.createHash('sha256').update(given).digest();
 	const b = crypto.createHash('sha256').update(expected).digest();
 	if (!crypto.timingSafeEqual(a, b)) {

@@ -18,9 +18,9 @@ sms-bulk-sender/
 
 ## How it works
 
-1. **Frontend** (`client/index.html`) — a single static page. You drop in a CSV/XLSX file (parsed client-side with SheetJS), the file must have a `phone` or `mobile` column. You write a message using merge tags like `{first_name}` or `{first_name|there}` (case/space/underscore-insensitive match against your file's column headers, optionally falling back to given text if the column is empty/missing — blank if no fallback given). Clicking **Send** POSTs `{ contacts, message }` as JSON to the backend URL configured at the top of the page, with the API key from the page in an `X-API-Key` header.
+1. **Frontend** (`client/index.html`) — a single static page. You drop in a CSV/XLSX file (parsed client-side with SheetJS), the file must have a `phone` or `mobile` column. You write a message using merge tags like `{first_name}` or `{first_name|there}` (case/space/underscore-insensitive match against your file's column headers, optionally falling back to given text if the column is empty/missing — blank if no fallback given). Clicking **Send** POSTs `{ contacts, message }` as JSON to the backend URL configured at the top of the page, with the API key from the page as `apiKey` in the same JSON body.
 
-2. **Backend** (`functions/send_sms/index.js`) — an Express app deployed as a Catalyst function with one route: `POST /bulk`. Rejects the request with `401` unless `X-API-Key` matches `SMS_API_KEY`. Takes `{ contacts: [...], message: "..." }` (at most `SMS_MAX_CONTACTS`), normalizes each phone number (strips spaces, dashes, dots and brackets; keeps a leading `+`; must be 7–15 digits), skips invalid and duplicate numbers, applies the merge tags per-contact, and sends each via the Vumber API with at most `SMS_CONCURRENCY` requests in flight. Returns per-contact results: `phone`, `success`/`skipped`, `sentAt` (ISO timestamp), `message` (the resolved text actually sent to that contact), and `messageId` or an `error`/`reason`.
+2. **Backend** (`functions/send_sms/index.js`) — an Express app deployed as a Catalyst function with one route: `POST /bulk`. Rejects the request with `401` unless the body's `apiKey` (or an `X-API-Key` header) matches `SMS_API_KEY`. Takes `{ contacts: [...], message: "..." }` (at most `SMS_MAX_CONTACTS`), normalizes each phone number (strips spaces, dashes, dots and brackets; keeps a leading `+`; must be 7–15 digits), skips invalid and duplicate numbers, applies the merge tags per-contact, and sends each via the Vumber API with at most `SMS_CONCURRENCY` requests in flight. Returns per-contact results: `phone`, `success`/`skipped`, `sentAt` (ISO timestamp), `message` (the resolved text actually sent to that contact), and `messageId` or an `error`/`reason`.
 
 3. **Results table** — after a send, the frontend shows a per-contact table (status, sent time, resolved message, and the Vumber message ID or error) plus sent/failed/skipped counts. Note: "Sent" means Vumber accepted the message for sending — their `/text-messages` API has no delivery-receipt field and no GET-by-id status endpoint, so true carrier delivery confirmation isn't available through this API.
 
@@ -31,7 +31,7 @@ sms-bulk-sender/
 | `VUMBER_API_KEY` | Auth for the Vumber SMS API |
 | `VUMBER_ACCOUNT_NO` | Vumber account the messages are sent from |
 | `VUMBER_PUBLIC_NUMBER` | The sending number |
-| `SMS_API_KEY` | Shared secret callers must send as `X-API-Key`. **Required** — if unset, `/bulk` refuses every request |
+| `SMS_API_KEY` | Shared secret callers must send as `apiKey` in the body (or an `X-API-Key` header). **Required** — if unset, `/bulk` refuses every request |
 | `SMS_MAX_CONTACTS` | Optional, default `500`. Max contacts per request |
 | `SMS_CONCURRENCY` | Optional, default `5`. Parallel Vumber calls |
 

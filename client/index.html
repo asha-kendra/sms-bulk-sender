@@ -192,7 +192,7 @@
 		<p class="hint">Points at your deployed Catalyst function. Change it if you redeploy under a different URL.</p>
 		<label for="apiKey" style="margin-top:12px;">API key</label>
 		<input type="password" id="apiKey" autocomplete="off" placeholder="Value of SMS_API_KEY on the function">
-		<p class="hint">Sent as the <code>X-API-Key</code> header. Remembered in this browser only.</p>
+		<p class="hint">Sent with each request and checked against <code>SMS_API_KEY</code>. Remembered in this browser only.</p>
 	</section>
 
 	<section>
@@ -345,8 +345,8 @@ sendBtn.addEventListener('click', async () => {
 	try {
 		const resp = await fetch(apiUrl, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-			body: JSON.stringify({ contacts: parsedContacts, message })
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ contacts: parsedContacts, message, apiKey })
 		});
 		const data = await resp.json().catch(() => ({}));
 
