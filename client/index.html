@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMS Blast — Vumber</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+	:root {
+		--ink: #1a1d1f;
+		--paper: #fafaf8;
+		--line: #dcdad4;
+		--accent: #2d5f4c;
+		--accent-soft: #e6efe9;
+		--warn: #a3402a;
+		--warn-soft: #f7e9e5;
+		--muted: #6b6963;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+	}
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		background: var(--paper);
+		color: var(--ink);
+		padding: 32px 20px 80px;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+	}
+	h1 {
+		font-size: 22px;
+		font-weight: 650;
+		letter-spacing: -0.01em;
+		margin: 0 0 4px;
+	}
+	.subtitle {
+		color: var(--muted);
+		font-size: 14px;
+		margin: 0 0 32px;
+	}
+	section {
+		background: #fff;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 20px 22px;
+		margin-bottom: 16px;
+	}
+	section h2 {
+		font-size: 13px;
+		text-transform: none;
+		font-weight: 650;
+		margin: 0 0 12px;
+		color: var(--ink);
+	}
+	label {
+		display: block;
+		font-size: 12.5px;
+		color: var(--muted);
+		margin-bottom: 6px;
+	}
+	input[type="text"], input[type="url"], textarea {
+		width: 100%;
+		font-size: 13.5px;
+		font-family: inherit;
+		padding: 9px 11px;
+		border: 1px solid var(--line);
+		border-radius: 7px;
+		background: var(--paper);
+		color: var(--ink);
+	}
+	textarea {
+		min-height: 130px;
+		resize: vertical;
+		line-height: 1.5;
+	}
+	.hint {
+		font-size: 11.5px;
+		color: var(--muted);
+		margin-top: 6px;
+	}
+	.dropzone {
+		border: 1.5px dashed var(--line);
+		border-radius: 8px;
+		padding: 28px 16px;
+		text-align: center;
+		cursor: pointer;
+		transition: border-color .15s ease, background .15s ease;
+	}
+	.dropzone:hover, .dropzone.drag {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.dropzone p { margin: 0; font-size: 13.5px; color: var(--muted); }
+	.dropzone strong { color: var(--ink); }
+	#fileInput { display: none; }
+	.file-chip {
+		display: none;
+		align-items: center;
+		gap: 8px;
+		margin-top: 12px;
+		font-size: 13px;
+		background: var(--accent-soft);
+		border-radius: 6px;
+		padding: 7px 10px;
+		color: var(--accent);
+	}
+	.file-chip.show { display: flex; }
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 12.5px;
+		margin-top: 14px;
+	}
+	th, td {
+		text-align: left;
+		padding: 6px 8px;
+		border-bottom: 1px solid var(--line);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 140px;
+	}
+	th { color: var(--muted); font-weight: 600; }
+	.results-table td.message-cell { max-width: 320px; cursor: help; }
+	.table-wrap { overflow-x: auto; }
+	.count-line {
+		font-size: 12.5px;
+		color: var(--muted);
+		margin-top: 10px;
+	}
+	button.primary {
+		background: var(--accent);
+		color: #fff;
+		border: none;
+		border-radius: 7px;
+		font-size: 14px;
+		font-weight: 600;
+		padding: 11px 20px;
+		cursor: pointer;
+		width: 100%;
+	}
+	button.primary:disabled {
+		opacity: .5;
+		cursor: not-allowed;
+	}
+	button.primary:hover:not(:disabled) { background: #244d3e; }
+	.status-line {
+		font-size: 13px;
+		margin-top: 12px;
+		display: none;
+	}
+	.status-line.show { display: block; }
+	.summary-pills {
+		display: flex;
+		gap: 8px;
+		margin-top: 10px;
+		flex-wrap: wrap;
+	}
+	.pill {
+		font-size: 12px;
+		border-radius: 5px;
+		padding: 4px 10px;
+		font-weight: 600;
+	}
+	.pill.ok { background: var(--accent-soft); color: var(--accent); }
+	.pill.fail { background: var(--warn-soft); color: var(--warn); }
+	.pill.skip { background: #f0eee8; color: var(--muted); }
+	.results-table td.status-ok { color: var(--accent); }
+	.results-table td.status-fail { color: var(--warn); }
+	.error-box {
+		background: var(--warn-soft);
+		color: var(--warn);
+		border-radius: 7px;
+		padding: 10px 12px;
+		font-size: 13px;
+		margin-top: 12px;
+		display: none;
+	}
+	.error-box.show { display: block; }
+</style>
+</head>
+<body>
+<main>
+	<h1>SMS Blast</h1>
+	<p class="subtitle">Upload a contact list, write the message, send via Vumber.</p>
+
+	<section>
+		<h2>Backend endpoint</h2>
+		<label for="apiUrl">Catalyst function URL (the /bulk route)</label>
+		<input type="url" id="apiUrl" value="https://smscampaign-939734750.development.catalystserverless.com/server/sms_campaign/bulk">
+		<p class="hint">Points at your deployed Catalyst function. Change it if you redeploy under a different URL.</p>
+	</section>
+
+	<section>
+		<h2>1. Contact list</h2>
+		<div class="dropzone" id="dropzone">
+			<p><strong>Click to choose</strong> or drag a CSV / Excel file here</p>
+			<p style="margin-top:4px;">Needs a column named <strong>phone</strong> or <strong>mobile</strong></p>
+		</div>
+		<input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+		<div class="file-chip" id="fileChip"></div>
+		<div id="previewWrap" style="display:none;">
+			<div class="table-wrap"><table id="previewTable"></table></div>
+			<p class="count-line" id="countLine"></p>
+		</div>
+	</section>
+
+	<section>
+		<h2>2. Message</h2>
+		<textarea id="messageInput" placeholder="Hi {first_name|there}, ..."></textarea>
+		<p class="hint">Insert a column's value with <code>{column_name}</code> or <code>{column_name|fallback text}</code> — e.g. <code>{first_name|there}</code> pulls from a "First Name" or "first_name" column, falling back to "there" if empty (or blank if no fallback given). Matching ignores case, spaces and underscores.</p>
+	</section>
+
+	<button class="primary" id="sendBtn" disabled>Upload a contact list first</button>
+	<div class="error-box" id="errorBox"></div>
+
+	<div class="status-line" id="statusLine">
+		<div class="summary-pills" id="summaryPills"></div>
+		<div class="table-wrap"><table class="results-table" id="resultsTable"></table></div>
+		<p class="hint">"Sent" means Vumber accepted the message for delivery — their API doesn't report back final carrier delivery status.</p>
+	</div>
+</main>
+
+<script>
+let parsedContacts = [];
+let headers = [];
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileChip = document.getElementById('fileChip');
+const previewWrap = document.getElementById('previewWrap');
+const previewTable = document.getElementById('previewTable');
+const countLine = document.getElementById('countLine');
+const sendBtn = document.getElementById('sendBtn');
+const errorBox = document.getElementById('errorBox');
+const statusLine = document.getElementById('statusLine');
+const summaryPills = document.getElementById('summaryPills');
+const resultsTable = document.getElementById('resultsTable');
+const messageInput = document.getElementById('messageInput');
+const apiUrlInput = document.getElementById('apiUrl');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', (e) => {
+	e.preventDefault();
+	dropzone.classList.remove('drag');
+	if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+	if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+	errorBox.classList.remove('show');
+	const reader = new FileReader();
+	reader.onload = (e) => {
+		try {
+			const data = new Uint8Array(e.target.result);
+			const workbook = XLSX.read(data, { type: 'array' });
+			const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+			const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+			if (!rows.length) {
+				showError('That file has no data rows.');
+				return;
+			}
+
+			parsedContacts = rows;
+			headers = Object.keys(rows[0]);
+
+			const hasPhoneCol = headers.some(h => {
+				const norm = h.toLowerCase().replace(/[_\s]/g, '');
+				return norm === 'phone' || norm === 'mobile' || norm === 'mobilenumber' || norm === 'phonenumber';
+			});
+			if (!hasPhoneCol) {
+				showError('No "phone" or "mobile" column found in this file — add one and re-upload.');
+				sendBtn.disabled = true;
+				sendBtn.textContent = 'Upload a contact list first';
+				return;
+			}
+
+			fileChip.textContent = `${file.name} — ${rows.length} contact${rows.length === 1 ? '' : 's'}`;
+			fileChip.classList.add('show');
+			renderPreview(rows, headers);
+			sendBtn.disabled = false;
+			sendBtn.textContent = `Send to ${rows.length} contact${rows.length === 1 ? '' : 's'}`;
+		} catch (err) {
+			showError('Could not read that file: ' + err.message);
+		}
+	};
+	reader.readAsArrayBuffer(file);
+}
+
+function renderPreview(rows, headers) {
+	const shown = rows.slice(0, 5);
+	let html = '<tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
+	for (const row of shown) {
+		html += '<tr>' + headers.map(h => `<td>${escapeHtml(String(row[h] ?? ''))}</td>`).join('') + '</tr>';
+	}
+	previewTable.innerHTML = html;
+	countLine.textContent = rows.length > 5 ? `Showing 5 of ${rows.length} rows` : `${rows.length} row${rows.length === 1 ? '' : 's'}`;
+	previewWrap.style.display = 'block';
+}
+
+function escapeHtml(str) {
+	const div = document.createElement('div');
+	div.textContent = str;
+	return div.innerHTML;
+}
+
+function showError(msg) {
+	errorBox.textContent = msg;
+	errorBox.classList.add('show');
+}
+
+sendBtn.addEventListener('click', async () => {
+	errorBox.classList.remove('show');
+	const message = messageInput.value.trim();
+	const apiUrl = apiUrlInput.value.trim();
+
+	if (!message) { showError('Write a message first.'); return; }
+	if (!apiUrl) { showError('Set the backend endpoint URL first.'); return; }
+	if (!parsedContacts.length) { showError('Upload a contact list first.'); return; }
+
+	sendBtn.disabled = true;
+	sendBtn.textContent = `Sending to ${parsedContacts.length} contacts...`;
+	statusLine.classList.remove('show');
+
+	try {
+		const resp = await fetch(apiUrl, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ contacts: parsedContacts, message })
+		});
+		const data = await resp.json();
+
+		if (!resp.ok || data.success === false) {
+			showError(data.error || `Request failed (${resp.status})`);
+			sendBtn.disabled = false;
+			sendBtn.textContent = `Send to ${parsedContacts.length} contacts`;
+			return;
+		}
+
+		renderResults(data);
+		sendBtn.disabled = false;
+		sendBtn.textContent = `Send to ${parsedContacts.length} contacts`;
+	} catch (err) {
+		showError('Could not reach the backend: ' + err.message);
+		sendBtn.disabled = false;
+		sendBtn.textContent = `Send to ${parsedContacts.length} contacts`;
+	}
+});
+
+function renderResults(data) {
+	const results = data.results || [];
+	const sent = results.filter(r => r.success).length;
+	const failed = results.filter(r => !r.success && !r.skipped).length;
+	const skipped = results.filter(r => r.skipped).length;
+
+	summaryPills.innerHTML = `
+		<span class="pill ok">${sent} sent</span>
+		${failed ? `<span class="pill fail">${failed} failed</span>` : ''}
+		${skipped ? `<span class="pill skip">${skipped} skipped</span>` : ''}
+	`;
+
+	let html = '<tr><th>Phone</th><th>Status</th><th>Sent at</th><th>Message sent</th><th>Detail</th></tr>';
+	for (const r of results) {
+		const statusText = r.success ? 'Sent' : (r.skipped ? 'Skipped' : 'Failed');
+		const cls = r.success ? 'status-ok' : (r.skipped ? '' : 'status-fail');
+		const detail = r.messageId ? `ID ${r.messageId}` : (r.error || r.reason || '');
+		const sentAt = r.sentAt ? new Date(r.sentAt).toLocaleString() : '—';
+		const message = r.message || '—';
+		html += `<tr>
+			<td>${escapeHtml(r.phone || '—')}</td>
+			<td class="${cls}">${statusText}</td>
+			<td>${escapeHtml(sentAt)}</td>
+			<td class="message-cell" title="${escapeHtml(message)}">${escapeHtml(message)}</td>
+			<td>${escapeHtml(String(detail))}</td>
+		</tr>`;
+	}
+	resultsTable.innerHTML = html;
+	statusLine.classList.add('show');
+}
+</script>
+</body>
+</html>
