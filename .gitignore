@@ -2,4 +2,3 @@ node_modules/
 .env
 *.log
 *.zip
-functions/send_sms/index.html

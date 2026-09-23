@@ -186,10 +186,10 @@
 	<p class="subtitle">Upload a contact list, write the message, send via Vumber.</p>
 
 	<section>
-		<h2>Backend endpoint</h2>
-		<label for="apiUrl">Catalyst function URL (the /bulk route)</label>
-		<input type="url" id="apiUrl" value="https://smscampaign-939734750.development.catalystserverless.com/server/sms_campaign/bulk">
-		<p class="hint">Points at your deployed Catalyst function. Change it if you redeploy under a different URL.</p>
+		<h2>Backend</h2>
+		<label for="apiUrl">Send endpoint</label>
+		<input type="url" id="apiUrl" value="">
+		<p class="hint">Filled in automatically when this page is opened from the server. Only change it if the server runs somewhere else.</p>
 		<label for="apiKey" style="margin-top:12px;">API key</label>
 		<input type="password" id="apiKey" autocomplete="off" placeholder="Value of SMS_API_KEY on the function">
 		<p class="hint">Sent with each request and checked against <code>SMS_API_KEY</code>. Remembered in this browser only.</p>
@@ -244,10 +244,9 @@ const messageInput = document.getElementById('messageInput');
 const apiUrlInput = document.getElementById('apiUrl');
 const apiKeyInput = document.getElementById('apiKey');
 
-// When the page is served by the Catalyst function itself (/server/<function>/),
-// post to that same function's /bulk route.
-if (location.protocol.startsWith('http') && location.pathname.startsWith('/server/')) {
-	apiUrlInput.value = location.origin + location.pathname.replace(/\/(index\.html)?$/, '') + '/bulk';
+// The page is normally served by the same server that handles /bulk.
+if (location.protocol.startsWith('http')) {
+	apiUrlInput.value = location.origin + '/bulk';
 }
 
 try { apiKeyInput.value = localStorage.getItem('smsApiKey') || ''; } catch (e) {}

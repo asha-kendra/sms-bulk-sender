@@ -1,83 +1,66 @@
 # SMS Bulk Sender
 
-A small full-stack app for sending a merge-tagged SMS blast to a list of contacts uploaded as CSV/Excel, via a Zoho Catalyst function backed by the Vumber SMS API.
+Upload a CSV/Excel contact list, write a message with merge tags, and send it as individual SMS via the Vumber API. One small Node/Express server serves the upload page and sends the texts.
 
 ## Structure
 
 ```
 sms-bulk-sender/
-├── client/
-│   └── index.html        # Static frontend — upload a contact list, write a message, send
-└── functions/
-    └── send_sms/          # Zoho Catalyst "advancedio" Node function (Express app)
-        ├── index.js
-        ├── package.json
-        ├── package-lock.json
-        └── catalyst-config.json
+├── server.js          # Express server: serves public/ and handles POST /bulk
+├── public/
+│   └── index.html     # Upload page
+├── package.json
+├── .env.example       # Settings template (copy to .env)
+└── render.yaml        # Optional one-click deploy to Render
 ```
 
 ## How it works
 
-1. **Frontend** (`client/index.html`) — a single static page. You drop in a CSV/XLSX file (parsed client-side with SheetJS), the file must have a `phone` or `mobile` column. You write a message using merge tags like `{first_name}` or `{first_name|there}` (case/space/underscore-insensitive match against your file's column headers, optionally falling back to given text if the column is empty/missing — blank if no fallback given). Clicking **Send** POSTs `{ contacts, message }` as JSON to the backend URL configured at the top of the page, with the API key from the page as `apiKey` in the same JSON body.
+1. **Page** (`public/index.html`): drop in a CSV/XLSX file (parsed in the browser with SheetJS). It needs a `phone` or `mobile` column. Write a message using merge tags like `{first_name}` or `{first_name|there}` (matches your column headers ignoring case, spaces and underscores, and falls back to the text after `|` when the cell is empty). Enter the API key and press **Send**.
+2. **Server** (`server.js`): `POST /bulk` takes `{ contacts, message, apiKey }`. It:
+   - rejects the request with `401` unless `apiKey` (or an `X-API-Key` header) matches `SMS_API_KEY`, and refuses every request if `SMS_API_KEY` isn't set;
+   - accepts at most `SMS_MAX_CONTACTS` contacts;
+   - cleans each phone number (removes spaces, dashes, dots and brackets, keeps a leading `+`, requires 7–15 digits) and skips invalid and duplicate numbers;
+   - fills in the merge tags and sends each text via Vumber, `SMS_CONCURRENCY` at a time.
+3. **Results**: the page shows each contact's status, time, the exact text sent, and the Vumber message ID or error, plus sent/failed/skipped counts. "Sent" means Vumber accepted the message; their API gives no carrier delivery confirmation.
 
-2. **Backend** (`functions/send_sms/index.js`) — an Express app deployed as a Catalyst function with one route: `POST /bulk`. Rejects the request with `401` unless the body's `apiKey` (or an `X-API-Key` header) matches `SMS_API_KEY`. Takes `{ contacts: [...], message: "..." }` (at most `SMS_MAX_CONTACTS`), normalizes each phone number (strips spaces, dashes, dots and brackets; keeps a leading `+`; must be 7–15 digits), skips invalid and duplicate numbers, applies the merge tags per-contact, and sends each via the Vumber API with at most `SMS_CONCURRENCY` requests in flight. Returns per-contact results: `phone`, `success`/`skipped`, `sentAt` (ISO timestamp), `message` (the resolved text actually sent to that contact), and `messageId` or an `error`/`reason`.
+## Settings
 
-3. **Results table** — after a send, the frontend shows a per-contact table (status, sent time, resolved message, and the Vumber message ID or error) plus sent/failed/skipped counts. Note: "Sent" means Vumber accepted the message for sending — their `/text-messages` API has no delivery-receipt field and no GET-by-id status endpoint, so true carrier delivery confirmation isn't available through this API.
+| Variable | Required | Used for |
+|---|---|---|
+| `VUMBER_API_KEY` | yes | Vumber API auth |
+| `VUMBER_ACCOUNT_NO` | yes | Vumber account to send from |
+| `VUMBER_PUBLIC_NUMBER` | yes | Sending number |
+| `SMS_API_KEY` | yes | Password typed into the upload page |
+| `PORT` | no (3000) | Port the server listens on |
+| `SMS_MAX_CONTACTS` | no (500) | Max contacts per send |
+| `SMS_CONCURRENCY` | no (5) | Parallel Vumber calls |
 
-## Required environment variables (set in the Catalyst console, or via the Catalyst MCP `Update_Environment_Variable` tool)
+## Run on your computer
 
-| Variable | Used for |
-|---|---|
-| `VUMBER_API_KEY` | Auth for the Vumber SMS API |
-| `VUMBER_ACCOUNT_NO` | Vumber account the messages are sent from |
-| `VUMBER_PUBLIC_NUMBER` | The sending number |
-| `SMS_API_KEY` | Shared secret callers must send as `apiKey` in the body (or an `X-API-Key` header). **Required** — if unset, `/bulk` refuses every request |
-| `SMS_MAX_CONTACTS` | Optional, default `500`. Max contacts per request |
-| `SMS_CONCURRENCY` | Optional, default `5`. Parallel Vumber calls |
-
-## Running locally
-
-Frontend: it's a static file, just open `client/index.html` in a browser, or serve the folder:
-
-```bash
-npx serve client
-```
-
-Backend: Catalyst functions aren't meant to run as a plain Node server locally in this exported form (no local dev harness is included in the export) — install deps and deploy instead:
+Needs [Node.js](https://nodejs.org) 18 or newer.
 
 ```bash
-cd functions/send_sms
+git clone https://github.com/asha-kendra/sms-bulk-sender
+cd sms-bulk-sender
 npm install
+cp .env.example .env     # then fill in the values
+npm start
 ```
 
-## Deploying
+Open http://localhost:3000.
 
-This is a standard Catalyst function export (`catalyst-config.json` names it `send_sms`, stack `node24`, type `advancedio`). If you have the Catalyst CLI set up and linked to your project:
+## Deploy online (Render, free plan)
 
-```bash
-catalyst deploy --only functions/send_sms
-```
+1. Sign in at https://render.com with GitHub.
+2. **New → Blueprint**, pick this repository. Render reads `render.yaml`.
+3. Enter the four required settings when asked, then deploy.
+4. Open the `https://…onrender.com` address Render gives you.
 
-### Opening the page (served by the function)
-
-The function also serves the upload page at its root, so no separate web hosting is needed (Catalyst's free trial doesn't include Web Client Hosting):
-
-```
-https://<project-domain>/server/<function-route>/
-```
-
-e.g. `https://smscampaign-939734750.development.catalystserverless.com/server/sms_campaign/`. Served that way, the page fills in its own `/bulk` URL, and the page and API share one origin, so there is no CORS to configure. Opening `index.html` straight from disk (`file://`) is what causes "Failed to fetch" against Catalyst.
-
-To build the zip to upload as the function's code (it bundles a copy of `client/index.html`):
-
-```bash
-./bundle.sh        # writes send_sms.zip
-```
-
-Then point `client/index.html`'s "Catalyst function URL" field at the deployed `/bulk` route for that function (an API Gateway route pointing at it — the original page shipped with `.../server/sms_campaign/bulk`, which may be a differently-named gateway route mapped to this same function).
+Free Render services go to sleep when unused, so the first page load after a while can take up to a minute.
 
 ## Notes
 
-- Phone numbers are not given a country code. Numbers without a leading `+` are sent to Vumber as-is (digits only), so use full international format in your file if Vumber needs it.
-- A whole send runs inside one function call. With the defaults (500 contacts, 5 at a time) a slow Vumber API could approach the function's execution timeout; split very large lists into several uploads.
-- "Sent" means Vumber accepted the message; there is no carrier delivery confirmation (see above).
+- Keep `SMS_API_KEY` private. Anyone with it and the page address can send texts from your Vumber account.
+- Numbers are not given a country code. Store them in full international format (e.g. `+91…`) if Vumber needs it.
+- A send runs as one request. For very large lists, split the file into several uploads.

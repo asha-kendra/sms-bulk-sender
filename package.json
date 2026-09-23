@@ -1,0 +1,17 @@
+{
+  "name": "sms-bulk-sender",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Send a merge-tagged SMS blast to a CSV/Excel contact list via the Vumber API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "4.22.3"
+  }
+}

@@ -1,5 +1,6 @@
+require('dotenv').config();
+
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
@@ -10,21 +11,11 @@ const CONCURRENCY = parseInt(process.env.SMS_CONCURRENCY, 10) || 5;
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Allow the standalone upload tool (opened from any origin) to call this API.
-app.use((req, res, next) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
-	if (req.method === 'OPTIONS') {
-		res.status(200).end();
-		return;
-	}
-	next();
-});
+// The upload page is served from this same server, so no CORS headers are needed.
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Rejects requests whose key doesn't match SMS_API_KEY. The key is read from the JSON
-// body's apiKey (what the upload page sends, so no extra CORS header is needed) or an
-// X-API-Key header. Fails closed if SMS_API_KEY isn't configured.
+// body's apiKey (what the upload page sends) or an X-API-Key header. Fails closed if SMS_API_KEY isn't configured.
 function requireApiKey(req, res, next) {
 	const expected = process.env.SMS_API_KEY;
 	if (!expected) {
@@ -159,18 +150,11 @@ async function handleBulkRequest(req, res) {
 	}
 }
 
-// Serves the upload page from the function itself, so the page and /bulk share one
-// origin (no CORS, no separate web hosting). index.html is copied in by bundle.sh.
-const pagePath = path.join(__dirname, 'index.html');
-app.get(['/', '/index.html'], (req, res) => {
-	if (!fs.existsSync(pagePath)) {
-		res.status(404).send('index.html is not bundled with this function; build the zip with bundle.sh');
-		return;
-	}
-	res.sendFile(pagePath);
-});
-
 app.post('/bulk', requireApiKey, handleBulkRequest);
-app.options('/bulk', (req, res) => res.status(200).end());
+
+if (require.main === module) {
+	const port = process.env.PORT || 3000;
+	app.listen(port, () => console.log(`SMS bulk sender running on http://localhost:${port}`));
+}
 
 module.exports = app;

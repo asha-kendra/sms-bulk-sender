@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sms-bulk-sender
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: VUMBER_API_KEY
+        sync: false
+      - key: VUMBER_ACCOUNT_NO
+        sync: false
+      - key: VUMBER_PUBLIC_NUMBER
+        sync: false
+      - key: SMS_API_KEY
+        sync: false
